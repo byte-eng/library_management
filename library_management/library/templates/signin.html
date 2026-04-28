@@ -1,0 +1,16 @@
+{% extends 'auth_base.html' %}
+{% block content %}
+
+<div class="col-5 mx-auto card p-4 shadow">
+    <h3>Login</h3>
+
+    <form method="post">
+        {% csrf_token %}
+        <input type="email" name="email" class="form-control mb-2" placeholder="Email">
+        <input type="password" name="password" class="form-control mb-2" placeholder="Password">
+        <button class="btn btn-success w-100">Login</button><br><br>
+    </form>
+    <a href="{% url 'signup' %}" style="text-decoration: none;">Register</a>
+</div>
+
+{% endblock %}

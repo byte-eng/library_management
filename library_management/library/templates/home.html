@@ -1,0 +1,252 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="row g-0">
+    <div class="col-lg-2 bg-white border-end min-vh-100 p-3">
+        <h6 class="text-muted mb-3">SEARCH & FILTER</h6>
+
+        <div class="filter-group">
+            <label>Title</label>
+            <input type="text" id="title" class="filter-input" placeholder="Book Title">
+            <div id="title-box" class="filter-dropdown"></div>
+        </div>
+
+        <div class="filter-group">
+            <label>Author</label>
+            <input type="text" id="author" class="filter-input" placeholder="Author">
+            <div id="author-box" class="filter-dropdown"></div>
+        </div>
+        
+        <div class="filter-group">
+            <label>Category</label>
+            <input type="text" id="category" class="filter-input" placeholder="Category">
+            <div id="category-box" class="filter-dropdown"></div>
+        </div><br>
+
+        <select id="sort" class="form-control mt-2">
+            <option value="">Sort By</option>
+            <option value="title_asc">Title (A-Z)</option>
+            <option value="title_desc">Title (Z-A)</option>
+            <option value="newest">Newest</option>
+            <option value="oldest">Oldest</option>
+        </select>
+        <a href="{% url 'student_dashboard' %}">Dashboard</a>
+
+    </div>
+
+    <div class="col-lg-10 bg-light p-4">
+        <div class="mb-4">
+            <h4 class="fw-bold">Available Books</h4>
+            <p class="text-muted mb-0">Browse and manage your books</p>
+        </div>
+
+        <div class="row g-4" id="book-container">
+            {% for book in page_obj %}
+            <div class="col-md-4">
+                <div class="card h-100 border-0 shadow-sm">
+                    <div class="card-body">
+
+                        <h6 class="fw-bold">{{ book.title }}</h6>
+                        <p class="mb-2">
+                            <small class="text-muted">Author</small><br>
+                            {{ book.author.name }}
+                        </p>
+                        <p class="mb-0">
+                            <small class="text-muted">Category</small><br>
+                            {{ book.category.name }}
+                        </p>
+                        {% if role == 'student' %}
+                        <button class="btn btn-sm btn-primary issue-btn" data-book-id="{{ book.id }}">{{ book.button_label | default:"Request Issue" }}</button>
+                        {% endif %}
+
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+
+        <div class="position-fixed start-50 translate-middle-x" id="pagination-container" style="bottom: 20px; z-index: 1050;">
+            <ul class="pagination">
+                {% if page_obj.has_previous %}
+                <li class="page-item">
+                    <a class="page-link" href="#" data-page="{{ page_obj.previous_page_number }}">Previous</a>
+                </li>
+                {% endif %}
+
+                <li class="page-item active">
+                    <span class="page-link">{{ page_obj.number }}</span>
+                </li>
+
+                {% if page_obj.has_next %}
+                <li class="page-item">
+                    <a class="page-link" href="#" data-page="{{ page_obj.next_page_number }}">Next</a>
+                </li>
+                {% endif %}
+            </ul>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block script %}
+<script>
+    document.addEventListener("DOMContentLoaded", () => {
+        const title = document.getElementById('title');
+        const author = document.getElementById('author');
+        const category = document.getElementById('category');
+        const sort = document.getElementById('sort');
+
+        const titleBox = document.getElementById('title-box');
+        const authorBox = document.getElementById('author-box');
+        const categoryBox = document.getElementById('category-box');
+
+        const container = document.getElementById('book-container');
+        const pagination = document.getElementById('pagination-container');
+
+        const USER_ROLE = "{{ role }}"
+
+        let timeout;
+
+        function fetchData(page) {
+            const params = new URLSearchParams({
+                page:page,
+                title:title.value.trim(),
+                author:author.value.trim(),
+                category:category.value.trim(),
+                sort:sort.value
+            })
+
+            fetch(`?${params}`, {
+                headers: { 'X-Custom-Header': 'AJAX' }
+            })
+                .then(res => res.json())
+                .then(data => {
+                    renderBooks(data.books);
+                    renderPagination(data);
+                    renderSuggestions(data);
+                });
+        }
+
+        function renderBooks(books) {
+            if(!books.length){
+                container.innerHTML = "<p class='text-center'>No Books Found</p>";
+                pagination.innerHTML = ""
+                return;
+            }
+            container.innerHTML = books.map(b => `
+                <div class="col-md-4 mb-4">
+                    <div class="card p-3 shadow-sm">
+                        <h5>${b.title}</h5>
+                        <p><strong>Author:</strong> ${b.author}</p>
+                        <p><strong>Category:</strong> ${b.category}</p>
+                        ${USER_ROLE === 'student' ? `<button class="btn btn-sm btn-primary issue-btn" data-book-id="${b.id}">${b.button}</button>`: ""}
+                    </div>
+                </div>`).join("");
+        }
+
+        function renderPagination({ current_page, total_pages, has_previous, has_next, previous_page, next_page }) {
+            let start = Math.max(current_page - 1, 1);
+            let end = Math.min(start + 2, total_pages);
+            if (end - start < 2) start = Math.max(end - 2, 1);
+
+            let html = `<ul class="pagination">`;
+
+            if (has_previous)
+                html += `<li class="page-item">
+                        <a class="page-link" href="#" data-page="${previous_page}">&laquo; Previous</a>
+                     </li>`;
+
+            for (let i = start; i <= end; i++)
+                html += `<li class="page-item ${i === current_page ? 'active' : ''}">
+                        <a class="page-link" href="#" data-page="${i}">${i}</a>
+                     </li>`;
+
+            if (has_next)
+                html += `<li class="page-item">
+                        <a class="page-link" href="#" data-page="${next_page}">Next &raquo;</a>
+                     </li>`;
+            html += `</ul>`;
+            pagination.innerHTML = html;
+        }
+
+        function buildList(box, items, input){
+            box.innerHTML = "";
+
+            if(input.value.trim().length < 3){
+                box.style.display = "none";
+                return;
+            }
+
+            // items = items.filter(i => i.toLowerCase().includes(input.value.toLowerCase()))
+
+            if(!items.length){
+                box.style.display = "none";
+                return;
+            }
+
+            items.forEach(item => {
+                const el = document.createElement("div");
+                el.className = "filter-item";
+                el.textContent = item;
+
+                el.onclick = () => {
+                    input.value = item;
+                    box.style.display = "none";
+                    fetchData();
+                }
+
+                box.appendChild(el);
+            })
+            box.style.display = "block";
+        }
+
+        function renderSuggestions(data){
+            buildList(titleBox, data.titles, title);
+            buildList(authorBox, data.authors, author);
+            buildList(categoryBox, data.categories, category);
+        }
+
+        function handleInput(){
+            clearTimeout(timeout);
+            timeout = setTimeout(() => fetchData(1), 400)
+        }
+
+        title.addEventListener("input", handleInput);
+        author.addEventListener("input", handleInput);
+        category.addEventListener("input", handleInput);
+
+        sort.addEventListener("change", ()=>fetchData())
+
+        pagination.addEventListener("click", e => {
+            const link = e.target.closest("a[data-page]");
+            if (link) {
+                e.preventDefault();
+                fetchData(link.dataset.page);
+            }
+        });
+
+        document.addEventListener("click", function(e){
+            if(e.target.classList.contains("issue-btn")){
+                const bookId = e.target.dataset.bookId;
+
+                fetch(`/request-issue/${bookId}/`, {
+                    method: "POST",
+                    headers: {
+                        "X-CSRFToken": getCSRFToken(),
+                        "X-Requested-With": "XMLHttpRequest"
+                    }
+                })
+                .then(res => res.json())
+                .then(() => fetchData())
+            }
+        })
+
+        function getCSRFToken(){
+            return document.cookie.split('; ')
+                .find(row => row.startsWith('csrftoken'))
+                ?.split('=')[1]
+        }
+
+        fetchData(1);
+    });
+</script>
+{% endblock %}

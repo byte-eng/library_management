@@ -1,0 +1,51 @@
+{% extends 'auth_base.html' %}
+{% block content %}
+
+<div class="col-md-6 mx-auto bg-white p-4 shadow">
+    <h3>Register</h3>
+
+    <form method="post">
+        {% csrf_token %}
+
+        <input type="text"     name="first_name" placeholder="First Name" class="form-control mt-2">
+        <input type="text"     name="last_name"  placeholder="Last Name"  class="form-control mt-2">
+        <input type="email"    name="email"      placeholder="Email"      class="form-control mt-2">
+        <input type="password" name="password"   placeholder="Password"   class="form-control mt-2">
+
+        <select name="role" class="form-control mt-2" id="role">
+            <option value="">Select Role</option>
+            <option value="guest">Guest</option>
+            <option value="student">Student</option>
+            <option value="librarian">Librarian</option>
+        </select>
+
+        <input type="text" name="department" id="department" class="form-control mt-3" placeholder="Department" hidden>
+        <br>
+        <button type="submit">Register</button><br><br>
+
+    </form>
+
+    <a href="{% url 'signin' %}" style="text-decoration: none;">Login</a>
+
+</div>
+
+{% endblock %}
+
+
+{% block script %}
+<script>
+    document.addEventListener("DOMContentLoaded",()=>{
+        const role = document.getElementById('role')
+        const dept = document.getElementById('department')
+
+        const toogleDept = ()=>{
+            const isStudent = role.value === 'student'
+            dept.hidden = !isStudent
+            dept.required = isStudent
+        }
+        role.addEventListener("change",toogleDept)
+        toogleDept()
+    })
+</script>
+{% endblock %}
+

@@ -1,0 +1,175 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="row g-0">
+
+    <div class="col-lg-2 bg-white border-end min-vh-100 p-3">
+        <h3 class="text-muted mb-3">Student Dashboard</h3><br>
+        
+        <h6 class="text-muted mb-3">SEARCH & FILTER</h6>
+        <select id="sort" class="form-select mt-2">
+            <option value="">All</option>
+            <option value="requested">Requested</option>
+            <option value="issued">Issued</option>
+            <option value="returned">Returned</option>
+        </select>
+
+        <button id="pay-all-btn" class="btn btn-dark w-100 mt-3">Pay Total Fine</button>
+    </div>
+
+    <div class="col-lg-10 p-4">
+        <h2 class="mb-4">My Books</h2>
+
+        <div class="row g-4" id="book-container">
+            {% for issue in issues %}
+            <div class="col-md-4 col-sm-6">
+                <div class="card h-100 shadow-sm">
+                    <div class="card-body d-flex flex-column">
+
+                        <h5 class="card-title">{{ issue.book.title }}</h5>
+                        <p class="card-text mb-1"><strong>Author:</strong> {{ issue.book.author.name }}</p>
+                        <p class="card-text mb-2"><strong>Category:</strong> {{ issue.book.category.name }}</p>
+
+                        {% if issue.calculated_fine > 0 %}
+                        <p class="text-danger fw-bold">Fine: {{issue.calculated_fine}}</p>
+                        <button class="btn btn-sm btn-danger pay-btn mt-2" data-id="{{ issue.id }}">Pay Fine</button>
+                        {% endif %}
+                        
+                        <div class="mt-auto">
+                            {% if issue.status == 'requested' %}
+                                <span class="badge bg-warning text-dark">Requested</span>
+                            {% elif issue.status == 'issued' %}
+                                <span class="badge bg-success">Issued</span>
+                            {% elif issue.status == 'returned' %}
+                                <span class="badge bg-secondary">Returned</span>                            
+                            {% endif %}
+                        </div>
+
+                    </div>
+                </div>
+            </div>
+            {% empty %}
+                <div class="col-12">
+                    <div class="alert alert-info text-center">
+                        No books found
+                    </div>
+                </div>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block script %}
+<script>
+    document.addEventListener("DOMContentLoaded", ()=>{
+        const stripe = Stripe("{{ STRIPE_PUBLISHABLE_KEY }}");
+
+        const sort = document.getElementById('sort')
+        const container = document.getElementById('book-container');
+        const payAllBtn = document.getElementById("pay-all-btn")
+
+        function fetchData(){
+            const params =new URLSearchParams({
+                sort:sort.value
+            })
+            fetch(`?${params.toString()}`, {
+                headers: {'X-Custom-Header': 'AJAX'}})
+            .then(res => res.json())
+            .then(data => {
+                renderBooks(data.issues)})
+        }
+
+        sort.addEventListener("change",fetchData);
+
+        setInterval(fetchData, 5000)
+
+        function renderBooks(issues){
+            container.innerHTML = ''
+            if (issues.length === 0) {
+                container.innerHTML = `
+                    <div class="col-12">
+                        <div class="alert alert-info text-center">
+                            No books found
+                        </div>
+                    </div>
+                `;
+                return;
+            }
+
+            issues.forEach(issue => {
+                container.insertAdjacentHTML("beforeend", createCard(issue))
+            })
+        }
+
+        function createCard(issue){
+            let badge = ''
+
+            if(issue.status === 'requested'){
+                badge = `<span class="badge bg-warning text-dark">Requested</span>`;
+            }
+            else if(issue.status === 'issued'){
+                badge = `<span class="badge bg-success">Issued</span>`;
+            }
+            else if(issue.status === 'returned'){
+                badge = `<span class="badge bg-secondary">Returned</span>`;
+            }
+
+            let fineHTML = ''
+
+            if(issue.fine>0){
+                fineHTML = `
+                    <p class="text-danger fw-bold">Fine: ${issue.fine}</p>
+                    <button class="btn btn-sm btn-danger pay-btn mt-2" data-id="${issue.id}">
+                        Pay Fine
+                    </button>
+                    `
+            }
+
+            return `
+                <div class="col-md-4 col-sm-6">
+                    <div class="card h-100 shadow-sm">
+                        <div class="card-body d-flex flex-column">
+
+                            <h5 class="card-title">${issue.title}</h5>
+                            <p class="card-text mb-1"><strong>Author:</strong> ${issue.author}</p>
+                            <p class="card-text mb-2"><strong>Category:</strong> ${issue.category}</p>
+                            ${fineHTML}
+
+                            <div class="mt-auto">${badge}</div>
+
+                        </div>
+                    </div>
+                </div>`;
+        }
+
+        document.addEventListener("click", function (e) {
+            if (e.target.classList.contains("pay-btn")) {
+                const issueId = e.target.dataset.id;
+
+                fetch(`/pay-single/${issueId}/`)
+                .then(res => res.json())
+                .then(data => {
+                    if(data.error){
+                        alert(data.error)
+                        return
+                    }
+                    stripe.redirectToCheckout({ sessionId: data.id });
+                });
+            }
+        })
+
+        payAllBtn.addEventListener("click", ()=>{
+            fetch(`/pay-all/`)
+            .then(res => res.json())
+            .then(data => {
+                if(data.error){
+                    alert(data.error)
+                    return
+                }
+                stripe.redirectToCheckout({ sessionId: data.id });
+            });
+        });
+    })
+</script>
+
+{% endblock %}

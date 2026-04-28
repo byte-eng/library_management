@@ -1,0 +1,113 @@
+/* 🔹 Global */
+body {
+    background: #f5f7fb;
+    font-family: 'Segoe UI', sans-serif;
+}
+
+/* 🔹 Sidebar Inputs */
+.filter-input {
+    border-radius: 8px;
+    border: 1px solid #ddd;
+    padding: 8px;
+    width: 100%;
+    transition: 0.2s;
+}
+
+.filter-input:focus {
+    border-color: #333;
+    outline: none;
+}
+
+/* 🔹 Filter Group */
+.filter-group {
+    margin-bottom: 15px;
+    position: relative;
+}
+
+/* 🔹 Dropdown Suggestions */
+.filter-dropdown {
+    position: absolute;
+    width: 100%;
+    background: white;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    display: none;
+    z-index: 1000;
+    max-height: 150px;
+    overflow-y: auto;
+}
+
+/* 🔹 Suggestion Item */
+.filter-item {
+    padding: 8px;
+    cursor: pointer;
+}
+
+.filter-item:hover {
+    background: #f1f1f1;
+}
+
+/* 🔹 Cards */
+.book-card {
+    border-radius: 12px;
+    transition: 0.2s;
+}
+
+.book-card:hover {
+    transform: translateY(-4px);
+}
+
+/* 🔹 Pagination */
+.pagination {
+    margin-bottom: 0;
+}
+
+/* 🔹 Scrollbar (optional cool UI) */
+.filter-dropdown::-webkit-scrollbar {
+    width: 6px;
+}
+
+.filter-dropdown::-webkit-scrollbar-thumb {
+    background: #ccc;
+    border-radius: 10px;
+}
+
+
+
+
+
+
+
+
+/* .filter-group {
+    position: relative;
+    margin-bottom: 15px;
+}
+
+.filter-input {
+    width: 100%;
+    padding: 8px;
+    border-radius: 6px;
+    border: 1px solid #ddd;
+}
+
+.filter-dropdown {
+    position: absolute;
+    width: 100%;
+    background: white;
+    border: 1px solid #eee;
+    border-radius: 6px;
+    max-height: 150px;
+    overflow-y: auto;
+    display: none;
+    z-index: 1000;
+}
+
+.filter-item {
+    padding: 6px 10px;
+    cursor: pointer;
+}
+
+.filter-item:hover {
+    background: #f1f1f1;
+} */
