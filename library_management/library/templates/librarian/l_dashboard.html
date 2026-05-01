@@ -7,7 +7,7 @@
         <ul class="nav flex-column">
             <li><a href="/books/" class="nav-link sidebar-link">Book Management</a></li>
             <li><a href="/authors/" class="nav-link sidebar-link">Author Management</a></li>
-            <li><a href="/fines/" class="nav-link sidebar-link">Fine Management</a></li>
+            <li><a href="/issues/" class="nav-link sidebar-link">Issue Management</a></li>
         </ul>
     </div>
     <div class="col-lg-10 p-4" id="main-content"></div>
@@ -42,7 +42,9 @@ document.addEventListener("DOMContentLoaded", () => {
             if (url.includes('/authors/')) {
                 initAuthorPage();
             }
-
+            if (url.includes('/issues/')) {
+                initIssuePage();
+            }
 
         });
     }
@@ -57,6 +59,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     loadPage("/books/");
 });
+
 
 function initBookPage() {
 
@@ -172,6 +175,7 @@ function initBookPage() {
     fetchBooks(1);
 }
 
+
 function setupAutocomplete(inputId, boxId, hiddenId, type){
     const input = document.getElementById(inputId);
     const box = document.getElementById(boxId);
@@ -190,9 +194,7 @@ function setupAutocomplete(inputId, boxId, hiddenId, type){
         fetch(`/search-ac/?q=${input.value}`)
         .then(res => res.json())
         .then(data => {
-
             const items = type === 'author' ? data.authors : data.categories;
-
             box.innerHTML = items.map(i =>
                 `<a href="#" data-id="${i.id}" data-name="${i.name}" class="list-group-item">${i.name}</a>`
             ).join("");
@@ -362,7 +364,99 @@ function initAuthorPage(){
     })
 
     fetchAuthors(1)
+}
 
+function initIssuePage(){
+    const table = document .getElementById("issue-table")
+    const pagination = document.getElementById("issue-pagination")
+
+    if(!table) return
+    let currentSearch = ""
+
+    window.fetchIssues= function(page=1){
+        fetch(`/issues/?page=${page}&search=${currentSearch}`, {
+            headers:{'X-Custom-Header':'AJAX'}
+        })
+        .then(res => res.json())
+        .then(data => {
+            renderIssues(data.issues)
+            renderPagination(data)
+        })
+    }
+
+    function renderIssues(issues){
+        table.innerHTML = issues.map(i => `
+            <tr>
+                <td>${i.student}</td>
+                <td>${i.book}</td>
+                <td>${getStatusBadge(i.status)}</td>
+                <td>${i.issue_date || '-'}</td>
+                <td>${i.return_date || '-'}</td>
+                <td>${i.fine}</td>
+                <td>${getActionButton(i)}</td>
+            </tr>
+        `).join("")
+    }
+
+    function getStatusBadge(status){
+        if(status==='requested') return `<span class="badge bg-warning">Requested</span>`
+        if(status==='issued') return `<span class="badge bg-primary">Issued</span>`
+        return `<span class="badge bg-success">Returned</span>`
+    }
+
+    function getActionButton(i){
+        if(i.status === "requested"){return `<button class="btn btn-success btn-sm accept-btn" data-id="${i.id}">Accept</button>`}
+        if(i.status === "issued"){return `<button class="btn btn-success btn-sm return-btn" data-id="${i.id}">Return</button>`}
+        return `<span class="text-success">Completed</span>`
+    }
+
+    function renderPagination({current_page,total_pages,has_previous,has_next,previous_page,next_page}){
+
+        let start = Math.max(current_page - 1, 1);
+        let end = Math.min(start + 2, total_pages);
+        if (end - start < 2) start = Math.max(end - 2, 1);
+
+        let html = `<ul class="pagination">`;
+
+        if (has_previous)
+            html += `<li class="page-item">
+                <a class="page-link" href="#" data-page="${previous_page}">&laquo; Previous</a>
+            </li>`;
+
+        for(let i = start; i <= end; i++)
+            html += `<li class="page-item ${i === current_page ? 'active' : ''}">
+                <a class="page-link" href="#" data-page="${i}">${i}</a>
+            </li>`;
+
+        if (has_next)
+            html += `<li class="page-item">
+                <a class="page-link" href="#" data-page="${next_page}"> Next &raquo;</a>
+            </li>`;
+
+        html += `</ul>`;
+        pagination.innerHTML = html;
+    }
+
+    pagination.addEventListener("click", e => {
+        const link = e.target.closest("a[data-page]");
+        if(link){
+            e.preventDefault();
+            fetchIssues(link.dataset.page);
+        }
+    });
+
+    let timer
+    document.addEventListener("input", e => {
+        if(e.target.id === "issue-search"){
+            clearTimeout(timer)
+            timer = setTimeout(()=>{
+                currentSearch = e.target.value
+                fetchIssues(1)
+            }, 300)
+        }
+    })
+
+    fetchIssues(1)
 }
 </script>
 {% endblock %}

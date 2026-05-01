@@ -13,11 +13,10 @@ from django.core.exceptions import ValidationError
 from django.core.paginator import Paginator
 from datetime import timedelta
 from django.utils import timezone
-import math,stripe,json
+import math,stripe
 from django.conf import settings
 
 stripe.api_key = settings.STRIPE_SECRET_KEY
-
 
 def signup(request):
     if request.method == "POST":
@@ -257,8 +256,8 @@ def student_dashboard(request):
             if late_time.total_seconds() <= 0:
                 return 0
             
-            late_minutes = math.ceil(late_time.total_seconds() / 60)
-            amount = late_minutes*10
+            late_days = math.ceil(late_time.total_seconds() / (60*60*24))
+            amount = late_days*20
         
             Fine.objects.update_or_create(
                 issue = issue,
@@ -341,7 +340,7 @@ def approve_issue(request, issue_id):
 
     now = timezone.now()
     issue.issue_date = now
-    issue.due_date = now + timedelta(minutes=1)
+    issue.due_date = now + timedelta(days=7)
 
     issue.book.available_copies -= 1
     issue.book.save()
@@ -366,16 +365,14 @@ def return_book(request, issue_id):
     issue.book.save()
     issue.save()
 
-    # late_days = (issue.return_date.date() - issue.due_date.date()).days
-
     late_time  = issue.return_date - issue.due_date
 
     if late_time.total_seconds()>0:
-        late_minutes = math.ceil(late_time.total_seconds() / 60)
+        late_days = math.ceil(late_time.total_seconds() / (60*60*24))
 
         Fine.objects.update_or_create(
             issue=issue,
-            defaults={'amount': late_minutes*10}
+            defaults={'amount': late_days*20}
         )
     
     return JsonResponse({'status':'ok'})
@@ -517,7 +514,7 @@ def payment_success(request):
 def librarian(request):
     return render(request, 'librarian/l_dashboard.html')
 
-
+#  Book Management
 
 @login_required
 def book_management(request):
@@ -564,7 +561,6 @@ def book_management(request):
     return render(request, 'librarian/partials/books.html', {'page_obj':page_obj})
 
 
-
 @login_required
 def search_author_category(request):
     query = request.GET.get('q', '').strip()
@@ -576,7 +572,6 @@ def search_author_category(request):
         'authors':authors,
         'categories':categories
     })
-
 
 
 @login_required
@@ -601,7 +596,6 @@ def add_book(request):
     return JsonResponse({'success': True})
 
 
-
 @login_required
 def delete_book(request, book_id):
     if request.method == "POST":
@@ -616,6 +610,8 @@ def delete_book(request, book_id):
     
     return JsonResponse({"success":False})
 
+
+#  Author Management
 
 @login_required
 def author_management(request):
@@ -652,7 +648,6 @@ def author_management(request):
     return render(request, 'librarian/partials/authors.html' )
 
 
-
 @login_required
 def add_author(request):
     if request.method == "POST":
@@ -671,3 +666,49 @@ def delete_author(request, author_id):
     author = get_object_or_404(Author, id=author_id)
     author.delete()
     return JsonResponse({'success': 'True'})
+
+
+#  Issue Management
+
+@login_required
+def issue_management(request):
+    issues = Issue.objects.all()
+    search =  request.GET.get('search', '').strip()
+
+    if search:
+        issues = issues.filter(
+            Q(student__user__first_name__icontains=search) |
+            Q(student__user__last_name__icontains=search)
+        )
+
+    paginator = Paginator(issues, 12)
+    page = request.GET.get('page')
+    page_obj = paginator.get_page(page)
+
+    if request.headers.get('X-Custom-Header') == "AJAX":
+        data = []
+
+        for i in page_obj:
+            fine = Fine.objects.filter(issue = i).first()
+
+            data.append({
+                'id':i.id,
+                'student': f"{i.student.user.first_name} {i.student.user.last_name}",
+                'book': i.book.title,
+                'status': i.status,
+                'issue_date':i.issue_date.strftime("%Y-%m-%d") if i.issue_date else "",
+                'return_date': i.return_date.strftime("%Y-%m-%d") if i.return_date else "",
+                'fine':str(fine.amount) if fine else 0,
+            })
+        
+        return JsonResponse({
+            'issues':data,
+            'has_previous': page_obj.has_previous(),
+            'has_next': page_obj.has_next(),
+            'current_page': page_obj.number,
+            'total_pages': paginator.num_pages,
+            'previous_page': page_obj.previous_page_number() if page_obj.has_previous() else None,
+            'next_page': page_obj.next_page_number() if page_obj.has_next() else None,
+        })
+
+    return render(request, 'librarian/partials/issues.html')
