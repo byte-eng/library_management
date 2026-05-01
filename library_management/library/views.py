@@ -654,6 +654,19 @@ def author_management(request):
 
 
 @login_required
+def add_author(request):
+    if request.method == "POST":
+        name = request.POST.get("name", '').strip()
+        if not name:
+            return JsonResponse({'success': False, 'error': 'Name required'})
+
+        if Author.objects.filter(name__iexact=name).exists():
+            return JsonResponse({'success': False, 'error': 'Already Exists'})
+
+        Author.objects.create(name=name)
+        return JsonResponse({'success':True})
+
+@login_required
 def delete_author(request, author_id):
     author = get_object_or_404(Author, id=author_id)
     author.delete()

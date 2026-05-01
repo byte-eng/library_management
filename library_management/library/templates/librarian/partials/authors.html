@@ -1,7 +1,8 @@
 <h4>Author Management</h4><br>
 
-<div class="d-flex justify-content-left mb-3">
+<div class="d-flex justify-content-between mb-3">
     <input type="text" class="form-control w-25" id="author-search" placeholder="Search Author ...">
+    <button class="btn btn-primary" id="add-author-btn">Add Author</button>
 </div>
 
 <table class="table table-bordered">
@@ -16,3 +17,17 @@
 </table>
 
 <div class="d-flex justify-content-center mt-3" id="author-pagination" style="bottom: 20px; z-index: 1050;"></div>
+
+<div class="modal fade" id="addAuthorModal">
+    <div class="modal-dialog">
+        <div class="modal-content p-3">
+
+            <form id="add-author-form">
+                <h5>Add Author</h5>
+                <input type="text" name="name" class="form-control mb-3" placeholder="Author Name" required>
+                <button class="btn btn-success w-100">Save</button>
+            </form>
+
+        </div>
+    </div>
+</div>

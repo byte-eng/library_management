@@ -332,6 +332,35 @@ function initAuthorPage(){
             .then(()=> fetchAuthors(1))
         }
     })
+
+    document.addEventListener("click", e => {
+        btn = e.target.closest("#add-author-btn")
+        if(btn){
+            new bootstrap.Modal(document.getElementById("addAuthorModal")).show();
+        }
+    })
+
+    document.addEventListener("submit", e =>{
+        if(e.target.id === "add-author-form"){
+            e.preventDefault()
+            const formData = new FormData(e.target)
+
+            fetch("/add-author/", {
+                method:"POST",
+                headers:{"X-CSRFToken": getCSRFToken()},
+                body:formData
+            })
+            .then(res => res.json())
+            .then(res => {
+                if(res.success){
+                    bootstrap.Modal.getInstance(document.getElementById("addAuthorModal")).hide()
+                    fetchAuthors(1)
+                }
+                else alert(res.error)
+            })
+        }
+    })
+
     fetchAuthors(1)
 
 }
