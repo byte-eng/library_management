@@ -1,0 +1,155 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="row g-0">
+
+    <div class="col-lg-2 bg-white border-end min-vh-100 p-3">
+        <h3 class="text-muted mb-3">Librarian Dashboard</h3><br>
+        <ul class="nav flex-column">
+            <li class="nav-item">
+                <a class="nav-link active fw-bold text-primary">Book Management</a>
+                <a class="nav-link active fw-bold text-primary">Author Management</a>
+                <a class="nav-link active fw-bold text-primary">Fine Management</a>
+            </li>
+        </ul>
+        
+
+    </div>
+
+    <div class="col-lg-10 p-4">
+        <h4 class="mb-4">Book Management</h4><br>
+
+            <table class="table table-bordered table-hover bg-white shadow-sm">
+                <thead class="table-dark">
+                    <tr>
+                        <th>Title</th>
+                        <th>Author</th>
+                        <th>Category</th>
+                        <th>Status</th>
+                        <th width="120">Action</th>
+                    </tr>
+                </thead>
+
+                <tbody id="book-table"></tbody>
+            </table>
+
+            <div class="d-flex justify-content-center mt-3" id="pagination" style="bottom: 20px; z-index: 1050;"></div>
+        
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+
+{% block script %}
+<script>
+    document.addEventListener("DOMContentLoaded", ()=>{
+        const table = document.getElementById("book-table")
+        const pagination = document.getElementById("pagination")
+
+        function fetchBooks(page){
+            fetch(`/books/?page=${page}`, {
+                headers : {'X-Custom-Header': 'AJAX'}
+            })
+            .then(res => res.json())
+            .then(data => {
+                renderBooks(data.books)
+                renderPagination(data)
+            })
+        }
+
+        function renderBooks(books) {
+            if (!books.length) {
+                table.innerHTML = "<p class='text-center'>No Books Found</p>"
+                pagination.innerHTML = ""
+                return
+            }
+
+            table.innerHTML = books.map(b => {
+                let badge = b.status === "Issued" ? `<span class="badge bg-danger">Issued</span>` : `<span class="badge bg-success">Available</span>`;
+
+                return `
+                    <tr>
+                        <td>${b.title}</td>
+                        <td>${b.author}</td>
+                        <td>${b.category}</td>
+                        <td>${badge}</td>
+                        <td><button class="btn btn-danger btn-sm delete-btn" data-id="${b.id}">Delete</button></td>
+                    </tr>`
+            }).join("")
+        }
+
+        function renderPagination({ current_page, total_pages, has_previous, has_next, previous_page, next_page }) {
+
+            let start = Math.max(current_page - 1, 1);
+            let end = Math.min(start + 2, total_pages);
+
+            if (end - start < 2) {
+                start = Math.max(end - 2, 1);
+            }
+
+            let html = `<ul class="pagination">`;
+
+            if (has_previous) {
+                html += `<li class="page-item">
+                            <a class="page-link" href="#" data-page="${previous_page}">
+                                &laquo; Previous
+                            </a>
+                        </li>`;
+            }
+
+            for (let i = start; i <= end; i++) {
+                html += `<li class="page-item ${i === current_page ? 'active' : ''}">
+                            <a class="page-link" href="#" data-page="${i}">
+                                ${i}
+                            </a>
+                        </li>`;
+            }
+
+            if (has_next) {
+                html += `<li class="page-item">
+                            <a class="page-link" href="#" data-page="${next_page}">
+                                Next &raquo;
+                            </a>
+                        </li>`;
+            }
+
+            html += `</ul>`;
+            pagination.innerHTML = html;
+        }
+
+        pagination.addEventListener("click", e => {
+            const link = e.target.closest("a[data-page]");
+            if (link) {
+                e.preventDefault();
+                fetchBooks(link.dataset.page);
+            }
+        });
+
+        document.addEventListener("click", function(e){
+            if(e.target.classList.contains("delete-btn")){
+                const id = e.target.dataset.id
+
+                if(confirm("Delete this Book?")){
+                    fetch(`/delete-book/${id}/`, {
+                        method : "POST",
+                        headers : {
+                            "X-CSRFToken": getCSRFToken(),
+                            "X-Requested-With": "XMLHttpRequest"
+                        }
+                    })
+                    .then(res => res.json())
+                    .then(()=>fetchBooks())
+                }
+            }
+        })
+
+        function getCSRFToken(){
+            return document.cookie.split('; ')
+                .find(row => row.startsWith('csrftoken'))
+                ?.split('=')[1]
+        }
+
+        fetchBooks(1);
+    })
+</script>
+{% endblock %}

@@ -5,7 +5,6 @@ urlpatterns = [
     path('',views.signup, name='signup'),
     path('signin/', views.signin, name='signin'),
     path('home/', views.home, name='home'),
-    path('librarian/', views.librarian, name='librarian'),
     path('logout/', views.logout_view, name='logout'),
     path('request-issue/<int:book_id>/', views.request_issue, name='request_issue'),
     path('student-dashboard/', views.student_dashboard, name='student_dashboard'),
@@ -15,4 +14,14 @@ urlpatterns = [
     path('pay-single/<int:issue_id>/', views.create_checkout_session_single),
     path('pay-all/', views.create_checkout_session_all),
     path('payment-success/', views.payment_success),
+
+    #   Librarian
+
+    path('librarian/', views.librarian, name='librarian'),
+    path('books/', views.book_management, name='book_management'),
+    path('add-book/', views.add_book),
+    path('search-ac/', views.search_author_category),
+    path('delete-book/<int:book_id>/', views.delete_book, name='delete_book'),
+    path('authors/', views.author_management, name='author_management'),
+    path('delete-author/<int:author_id>/', views.delete_author),
 ]

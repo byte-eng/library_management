@@ -1,5 +1,6 @@
-from django.shortcuts import render,redirect
+from django.shortcuts import render,redirect,get_object_or_404
 from django.http import JsonResponse
+from django.db.models import Q,Count
 from .models import Profile,Student,Author,Category,Book,Issue,Fine,Payment
 from django.contrib import messages
 from django.contrib.auth import authenticate,login,logout
@@ -12,7 +13,7 @@ from django.core.exceptions import ValidationError
 from django.core.paginator import Paginator
 from datetime import timedelta
 from django.utils import timezone
-import math,stripe
+import math,stripe,json
 from django.conf import settings
 
 stripe.api_key = settings.STRIPE_SECRET_KEY
@@ -190,7 +191,7 @@ def home(request):
     authors = books.values_list('author__name', flat=True).distinct()[:5] 
     categories = books.values_list('category__name', flat=True).distinct()[:5]
 
-    paginator = Paginator(books,9)
+    paginator = Paginator(books,12)
     page_number = request.GET.get('page')
     page_obj = paginator.get_page(page_number)
 
@@ -275,7 +276,10 @@ def student_dashboard(request):
 
     for issue in issues:
         issue.calculated_fine = get_fine(issue)
+        issue.is_paid = Fine.objects.filter(issue=issue, is_paid=True).exists()
         total_fine += issue.calculated_fine
+
+    has_payable_fines = Fine.objects.filter(issue__student=student, issue__status='returned', is_paid=False).exists()
 
     if request.headers.get('X-Custom-Header') == 'AJAX':
         data = []
@@ -288,9 +292,10 @@ def student_dashboard(request):
                 'category':issue.book.category.name,
                 'status':issue.status,
                 'fine':get_fine(issue),
+                'is_paid':Fine.objects.filter(issue=issue, is_paid=True).exists()
             })
 
-        return JsonResponse({'issues':data})
+        return JsonResponse({'issues':data,'has_payable_fines':has_payable_fines})
 
     return render(request, 's_dashboard.html', {'issues':issues,'STRIPE_PUBLISHABLE_KEY':settings.STRIPE_PUBLISHABLE_KEY})
 
@@ -307,7 +312,7 @@ def request_issue(request, book_id):
         
         book = Book.objects.get(id=book_id)
 
-        if Issue.objects.filter(student=student, book=book).exists():
+        if Issue.objects.filter(student=student, book=book, status__in=['requested','issued']).exists():
             return JsonResponse({'status':'exists'})
         
         if Issue.objects.filter(book=book, status='issued').exists():
@@ -417,7 +422,7 @@ def create_checkout_session_single(request, issue_id):
 def create_checkout_session_all(request):
     student = Student.objects.get(user = request.user)
 
-    fines = Fine.objects.filter(issue__student = student, is_paid = False)
+    fines = Fine.objects.filter(issue__student = student, issue__status='returned' ,is_paid = False)
     total = sum(f.amount for f in fines)
 
     if total<=0:
@@ -429,7 +434,7 @@ def create_checkout_session_all(request):
             'price_data': {
                 'currency': 'inr',
                 'product_data': {
-                    'name': 'Total Fine',
+                    'name': 'Total Fine (Returned Book Only)',
                 },
                 'unit_amount': int(total * 100),
             },
@@ -466,27 +471,190 @@ def payment_success(request):
         return redirect('student_dashboard')
     
     metadata = session.metadata
-    payment_type = metadata.get['type']
+    payment_type = metadata['type']
 
     if payment_type == 'single':
-        fine_id =  metadata.get['fine_id']
+        fine_id =  metadata['fine_id']
         try:
             fine = Fine.objects.get(id=fine_id, is_paid=False)
             fine.is_paid = True
             fine.save()
+
+            Payment.objects.create(
+                user = request.user,
+                amount = fine.amount,
+                stripe_session_id = session.id,
+                status = 'paid'
+            )
         except Fine.DoesNotExist:
             pass
 
     elif payment_type == 'all':
-        user_id = metadata.get['user_id']
+        user_id = metadata['user_id']
 
         student = Student.objects.get(user__id=user_id)
-        fines = Fine.objects.filter(issue__student=student, is_paid=False)
+        fines = Fine.objects.filter(issue__student=student, issue__status='returned' ,is_paid=False)
+
+        total = sum(f.amount for f in fines)
         fines.update(is_paid=True)
+
+        Payment.objects.create(
+            user = request.user,
+            amount = total,
+            stripe_session_id = session.id,
+            status = 'paid'
+        )
 
     return render(request, 'payment_success.html')
 
 
+
+#    Librarian 
+
+
+
 @login_required
 def librarian(request):
-    return render(request, 'l.html')
+    return render(request, 'librarian/l_dashboard.html')
+
+
+
+@login_required
+def book_management(request):
+    book_list = Book.objects.all()
+
+    search = request.GET.get('search', '').strip()
+
+    if search:
+        book_list = book_list.filter(
+            Q(title__icontains = search) |
+            Q(author__name__icontains = search) |
+            Q(category__name__icontains = search)
+        )
+
+    paginator = Paginator(book_list, 12)
+    page = request.GET.get('page')
+    page_obj = paginator.get_page(page)
+
+    if request.headers.get('X-Custom-Header') == 'AJAX':
+        data = []
+
+        for book in page_obj:
+            is_issued = Issue.objects.filter(book=book, status='issued').exists()
+            status = "Issued" if is_issued else "Available"
+        
+            data.append({
+                'id':book.id,
+                'title': book.title,
+                'author': book.author.name,
+                'category': book.category.name,
+                'status' : status
+            })
+
+        return JsonResponse({
+            'books': data,
+            'has_previous':page_obj.has_previous(),
+            'has_next':page_obj.has_next(),
+            'current_page':page_obj.number,
+            'total_pages':paginator.num_pages,
+            'previous_page':page_obj.previous_page_number() if page_obj.has_previous() else None,
+            'next_page':page_obj.next_page_number() if page_obj.has_next() else None,
+        })
+    
+    return render(request, 'librarian/partials/books.html', {'page_obj':page_obj})
+
+
+
+@login_required
+def search_author_category(request):
+    query = request.GET.get('q', '').strip()
+
+    authors = list(Author.objects.filter(name__icontains=query).values('id', 'name')[:5])
+    categories = list(Category.objects.filter(name__icontains=query).values('id', 'name')[:5])
+
+    return JsonResponse({
+        'authors':authors,
+        'categories':categories
+    })
+
+
+
+@login_required
+def add_book(request):
+    if request.method == "POST":
+        title = request.POST.get("title")
+        author_id = request.POST.get("author")
+        category_id = request.POST.get('category')
+
+        if not title or not author_id or not category_id:
+            return JsonResponse({'success': False})
+    
+        author = get_object_or_404(Author, id=author_id)
+        category = get_object_or_404(Category, id=category_id)
+
+        Book.objects.create(
+            title=title,
+            author=author,
+            category=category,
+        )
+
+    return JsonResponse({'success': True})
+
+
+
+@login_required
+def delete_book(request, book_id):
+    if request.method == "POST":
+        book = get_object_or_404(Book, id=book_id)
+
+        is_issued = Issue.objects.filter(book=book, status='issued').exists()
+        if is_issued:
+            return JsonResponse({'success': False, 'error': 'Book is issued'})
+        
+        book.delete()
+        return JsonResponse({'success':True})
+    
+    return JsonResponse({"success":False})
+
+
+@login_required
+def author_management(request):
+    authors = Author.objects.annotate(book_count = Count('book'))
+
+    search = request.GET.get('search', '').strip()
+    if search:
+        authors = authors.filter(name__icontains = search)
+
+    paginator = Paginator(authors, 12)
+    page = request.GET.get('page')
+    page_obj = paginator.get_page(page)
+
+    if request.headers.get('X-Custom-Header') == 'AJAX':
+        data = []
+
+        for a in page_obj:
+            data.append({
+                'id':a.id,
+                'name':a.name,
+                'book_count':a.book_count
+            })
+        
+        return JsonResponse({
+            'authors':data,
+            'has_previous': page_obj.has_previous(),
+            'has_next': page_obj.has_next(),
+            'current_page': page_obj.number,
+            'total_pages': paginator.num_pages,
+            'previous_page': page_obj.previous_page_number() if page_obj.has_previous() else None,
+            'next_page': page_obj.next_page_number() if page_obj.has_next() else None,
+        })
+
+    return render(request, 'librarian/partials/authors.html' )
+
+
+
+@login_required
+def delete_author(request, author_id):
+    author = get_object_or_404(Author, id=author_id)
+    author.delete()
+    return JsonResponse({'success': 'True'})

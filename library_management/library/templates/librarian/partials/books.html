@@ -1,0 +1,44 @@
+<h4>Book Management</h4><br>
+
+<div class="d-flex justify-content-between mb-3">
+    <input type="text" class="form-control w-25" id="search-input" placeholder="Search by title, author or category">
+    <button class="btn btn-primary" id="add-book-btn">Add Book</button>
+</div>
+
+
+<table class="table table-bordered">
+    <thead>
+        <tr>
+            <th>Title</th>
+            <th>Author</th>
+            <th>Category</th>
+            <th>Status</th>
+            <th>Action</th>
+        </tr>
+    </thead>
+    <tbody id="book-table"></tbody>
+</table>
+
+<div class="d-flex justify-content-center mt-3" id="pagination" style="bottom: 20px; z-index: 1050;"></div>
+
+<div class="modal fade" id="addBookModal">
+    <div class="modal-dialog">
+        <div class="modal-content p-3">
+
+            <form id="add-book-form">
+                <input type="text" name="title" class="form-control mb-2" placeholder="Title" required>
+
+                <input type="text" id="author-input" class="form-control mb-1" placeholder="Author">
+                <div id="author-suggestions" class="list-group mb-2"></div>
+                <input type="hidden" name="author" id="author-id">
+
+                <input type="text" id="category-input" class="form-control mb-1" placeholder="Category">
+                <div id="category-suggestions" class="list-group mb-2"></div>
+                <input type="hidden" name="category" id="category-id">
+
+                <button class="btn btn-success w-100">Save</button>
+            </form>
+
+        </div>
+    </div>
+</div>

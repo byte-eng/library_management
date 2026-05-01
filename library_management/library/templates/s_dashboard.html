@@ -30,8 +30,15 @@
                         <p class="card-text mb-2"><strong>Category:</strong> {{ issue.book.category.name }}</p>
 
                         {% if issue.calculated_fine > 0 %}
-                        <p class="text-danger fw-bold">Fine: {{issue.calculated_fine}}</p>
-                        <button class="btn btn-sm btn-danger pay-btn mt-2" data-id="{{ issue.id }}">Pay Fine</button>
+                            <p class="fw-bold {% if issue.is_paid %} text-success {% else %} text-danger {% endif %}">Fine: {{issue.calculated_fine}}
+                            {% if issue.is_paid %}
+                                <span class="ms-2">(Paid ✅)</span>
+                            {% endif %}
+                            </p>
+
+                            {% if not issue.is_paid and issue.status == 'returned'  %}
+                                <button class="btn btn-sm btn-danger pay-btn mt-2" data-id="{{ issue.id }}">Pay Fine</button>
+                            {% endif %}
                         {% endif %}
                         
                         <div class="mt-auto">
@@ -116,13 +123,22 @@
 
             let fineHTML = ''
 
-            if(issue.fine>0){
+            if (issue.fine > 0) {
+
+                let color = issue.is_paid ? 'text-success' : 'text-danger';
+
                 fineHTML = `
-                    <p class="text-danger fw-bold">Fine: ${issue.fine}</p>
-                    <button class="btn btn-sm btn-danger pay-btn mt-2" data-id="${issue.id}">
-                        Pay Fine
-                    </button>
-                    `
+                    <p class="${color} fw-bold">
+                        Fine: ${issue.fine} ${issue.is_paid ? '(Paid ✅)' : ''}
+                    </p>
+                `;
+
+                if (!issue.is_paid && issue.status === 'returned') {
+                    fineHTML += `
+                        <button class="btn btn-sm btn-danger pay-btn mt-2" data-id="${issue.id}">
+                            Pay Fine
+                        </button>`;
+                }
             }
 
             return `

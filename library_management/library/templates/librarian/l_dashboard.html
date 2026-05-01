@@ -1,0 +1,339 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="row g-0">
+    <div class="col-lg-2 bg-white border-end min-vh-100 p-3">
+        <h3 class="text-muted mb-3">Librarian Dashboard</h3><br>
+
+        <ul class="nav flex-column">
+            <li><a href="/books/" class="nav-link sidebar-link">Book Management</a></li>
+            <li><a href="/authors/" class="nav-link sidebar-link">Author Management</a></li>
+            <li><a href="/fines/" class="nav-link sidebar-link">Fine Management</a></li>
+        </ul>
+    </div>
+    <div class="col-lg-10 p-4" id="main-content"></div>
+</div>
+{% endblock %}
+
+
+{% block script %}
+<script>
+let currentSearch = ""
+
+function getCSRFToken() {
+    return document.cookie.split('; ')
+        .find(row => row.startsWith('csrftoken='))
+        ?.split('=')[1];
+}
+
+
+document.addEventListener("DOMContentLoaded", () => {
+
+    const content = document.getElementById("main-content");
+
+    function loadPage(url) {
+        fetch(url)
+        .then(res => res.text())
+        .then(html => {
+            content.innerHTML = html;
+
+            if (url.includes('/books/')) {
+                initBookPage();
+            }
+            if (url.includes('/authors/')) {
+                initAuthorPage();
+            }
+
+
+        });
+    }
+
+    // Sidebar
+    document.querySelectorAll(".sidebar-link").forEach(link => {
+        link.addEventListener("click", function(e){
+            e.preventDefault();
+            loadPage(this.getAttribute("href"));
+        });
+    });
+
+    loadPage("/books/");
+});
+
+function initBookPage() {
+
+    const table = document.getElementById("book-table");
+    const pagination = document.getElementById("pagination");
+
+    if (!table || !pagination) return;
+
+    // Fetch Books
+    window.fetchBooks = function(page = 1){
+        fetch(`/books/?page=${page}&search=${currentSearch}`, {
+            headers: {'X-Custom-Header':'AJAX'}
+        })
+        .then(res => res.json())
+        .then(data => {
+            renderBooks(data.books);
+            renderPagination(data);
+        });
+    }
+
+    // Render Books
+    function renderBooks(books){
+        table.innerHTML = books.map(b => `
+        <tr>
+            <td>${b.title}</td>
+            <td>${b.author}</td>
+            <td>${b.category}</td>
+            <td>
+                ${b.status === "Issued"
+                    ? '<span class="badge bg-danger">Issued</span>'
+                    : '<span class="badge bg-success">Available</span>'}
+            </td>
+            <td>
+                ${ b.status === 'Available' ? `<button class="btn btn-danger btn-sm delete-btn" data-id="${b.id}"> Delete </button>` : `<span class="text-muted">-</span>` }
+            </td>
+        </tr>`).join("");
+    }
+
+    // Pagination
+    function renderPagination({current_page,total_pages,has_previous,has_next,previous_page,next_page}){
+
+        let start = Math.max(current_page - 1, 1);
+        let end = Math.min(start + 2, total_pages);
+        if (end - start < 2) start = Math.max(end - 2, 1);
+
+        let html = `<ul class="pagination">`;
+
+        if (has_previous)
+            html += `<li class="page-item">
+                <a class="page-link" href="#" data-page="${previous_page}">&laquo; Previous</a>
+            </li>`;
+
+        for(let i = start; i <= end; i++)
+            html += `<li class="page-item ${i === current_page ? 'active' : ''}">
+                <a class="page-link" href="#" data-page="${i}">${i}</a>
+            </li>`;
+
+        if (has_next)
+            html += `<li class="page-item">
+                <a class="page-link" href="#" data-page="${next_page}"> Next &raquo;</a>
+            </li>`;
+
+        html += `</ul>`;
+        pagination.innerHTML = html;
+    }
+
+    pagination.addEventListener("click", e => {
+        const link = e.target.closest("a[data-page]");
+        if(link){
+            e.preventDefault();
+            fetchBooks(link.dataset.page);
+        }
+    });
+
+    // Search
+    let timer
+    document.addEventListener("input", e => {
+        if(e.target.id === "search-input"){
+            clearTimeout(timer)
+            timer = setTimeout(()=>{
+                currentSearch = e.target.value
+                fetchBooks(1)
+            }, 300)
+        }
+    })
+
+    // Delete Book
+    document.addEventListener("click", e => {
+        if(e.target.classList.contains("delete-btn")){
+            const confirmDelete = confirm("Are you sure to Delete this book?")
+            if(!confirmDelete) return
+
+            const id = e.target.dataset.id;
+
+            fetch(`/delete-book/${id}/`,{
+                method: "POST",
+                headers: {
+                    "X-CSRFToken": document.cookie.split('; ')
+                        .find(r => r.startsWith('csrftoken'))
+                        ?.split('=')[1]
+                }
+            })
+            .then(() => {
+                const currentPage =
+                    document.querySelector(".page-item.active a")?.dataset.page || 1;
+
+                fetchBooks(currentPage);
+            });
+        }
+    });
+
+    // Initial Load
+    fetchBooks(1);
+}
+
+function setupAutocomplete(inputId, boxId, hiddenId, type){
+    const input = document.getElementById(inputId);
+    const box = document.getElementById(boxId);
+    const hidden = document.getElementById(hiddenId);
+
+    input.addEventListener("input", () => {
+
+        if (!input.value.trim()) {
+            box.innerHTML = "";
+            hidden.value = "";
+            return;
+        }
+
+        hidden.value = "";
+
+        fetch(`/search-ac/?q=${input.value}`)
+        .then(res => res.json())
+        .then(data => {
+
+            const items = type === 'author' ? data.authors : data.categories;
+
+            box.innerHTML = items.map(i =>
+                `<a href="#" data-id="${i.id}" data-name="${i.name}" class="list-group-item">${i.name}</a>`
+            ).join("");
+        });
+    });
+
+    box.addEventListener("click", e => {
+        const item = e.target.closest("a");
+        if(!item) return;
+
+        input.value = item.dataset.name;
+        hidden.value = item.dataset.id;
+        box.innerHTML = "";
+    });
+}
+
+//  ADD BOOK
+document.addEventListener("click", e => {
+    const btn = e.target.closest("#add-book-btn");
+    if(btn){
+        new bootstrap.Modal(document.getElementById("addBookModal")).show();
+
+        setTimeout(()=>{
+            setupAutocomplete("author-input","author-suggestions","author-id","author");
+            setupAutocomplete("category-input","category-suggestions","category-id","category");
+        },200);
+    }
+});
+
+// SUBMIT
+document.addEventListener("submit", e => {
+    if(e.target.id === "add-book-form"){
+        e.preventDefault();
+
+        const f = new FormData(e.target);
+
+        fetch("/add-book/",{
+            method:"POST",
+            headers:{ "X-CSRFToken": getCSRFToken() },
+            body: f
+        })
+        .then(res => res.json())
+        .then(()=>{
+            bootstrap.Modal.getInstance(document.getElementById("addBookModal")).hide();
+            e.target.reset();
+            fetchBooks(1);
+        });
+    }
+});
+
+
+function initAuthorPage(){
+    const table = document .getElementById("author-table")
+    const pagination = document.getElementById("author-pagination")
+
+    if(!table) return
+    let currentSearch = ""
+    window.fetchAuthors = function(page = 1){
+        fetch(`/authors/?page=${page}&search=${currentSearch}`, {
+            headers: {'X-Custom-Header':'AJAX'}
+        })
+        .then(res => res.json())
+        .then(data => {
+            renderAuthors(data.authors);
+            renderPagination(data);
+        });
+    }
+
+    function renderAuthors(authors){
+        table.innerHTML = authors.map(a => `
+            <tr>
+                <td>${a.name}</td>
+                <td>${a.book_count}</td>
+                <td><button class="btn btn-danger btn-sm delete-author" data-id="${a.id}">Delete</button></td>
+            </tr>
+        `).join("")
+    }
+
+    function renderPagination({current_page,total_pages,has_previous,has_next,previous_page,next_page}){
+
+        let start = Math.max(current_page - 1, 1);
+        let end = Math.min(start + 2, total_pages);
+        if (end - start < 2) start = Math.max(end - 2, 1);
+
+        let html = `<ul class="pagination">`;
+
+        if (has_previous)
+            html += `<li class="page-item">
+                <a class="page-link" href="#" data-page="${previous_page}">&laquo; Previous</a>
+            </li>`;
+
+        for(let i = start; i <= end; i++)
+            html += `<li class="page-item ${i === current_page ? 'active' : ''}">
+                <a class="page-link" href="#" data-page="${i}">${i}</a>
+            </li>`;
+
+        if (has_next)
+            html += `<li class="page-item">
+                <a class="page-link" href="#" data-page="${next_page}"> Next &raquo;</a>
+            </li>`;
+
+        html += `</ul>`;
+        pagination.innerHTML = html;
+    }
+
+    pagination.addEventListener("click", e => {
+        const link = e.target.closest("a[data-page]");
+        if(link){
+            e.preventDefault();
+            fetchAuthors(link.dataset.page);
+        }
+    });
+
+    let timer
+    document.addEventListener("input", e => {
+        if(e.target.id === "author-search"){
+            clearTimeout(timer)
+            timer = setTimeout(()=>{
+                currentSearch = e.target.value
+                fetchAuthors(1)
+            }, 300)
+        }
+    })
+
+    document.addEventListener("click", e => {
+        const btn = e.target.closest(".delete-author")
+
+        if(btn){
+            if(!confirm("Delete Author")) return
+
+            const id = e.target.dataset.id
+
+            fetch(`/delete-author/${id}/`,{
+                method:"POST",
+                headers:{"X-CSRFToken": getCSRFToken()}
+            })
+            .then(()=> fetchAuthors(1))
+        }
+    })
+    fetchAuthors(1)
+
+}
+</script>
+{% endblock %}

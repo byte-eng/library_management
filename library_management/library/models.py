@@ -92,13 +92,20 @@ class Fine(models.Model):
 
 
 class Payment(models.Model):
+    ST_CHOICES = [
+        ('paid','paid'),
+        ('unpaid','unpaid')
+    ]
+    user = models.ForeignKey(User, on_delete=models.CASCADE, null=True, blank=True)
     fine = models.ManyToManyField(Fine)
-    stripe_payment_id = models.CharField(max_length=255, null=True, blank=True)
+    stripe_session_id = models.CharField(max_length=255, null=True, blank=True)
     amount = models.DecimalField(max_digits=8, decimal_places=2, default=0)
+    status = models.CharField(max_length=40, choices=ST_CHOICES ,default='unpaid')
     created_at = models.DateTimeField(auto_now_add=True, null=True)
 
     def __str__(self):
         return f"Payment ₹{self.amount}"
+
 
 
 from django.db.models.signals import post_save
